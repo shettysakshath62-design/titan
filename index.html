@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HostelHub - Corrected</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: #f2f2f2; 
+            margin: 0; 
+            padding: 0; 
+        }
+        .container { 
+            max-width: 420px; 
+            margin: 40px auto; 
+            background: white; 
+            padding: 20px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15); 
+            border-radius: 8px; 
+            /* Changed for a thicker orange outline */
+            border: 5px solid #ff9800; /* Thicker orange outline */
+        }
+        h2, h3 { text-align:center; color:#333; }
+        label { font-weight: bold; }
+        input[type="text"], input[type="password"], textarea, select {
+            width:100%; padding:8px; margin:6px 0 12px 0; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;
+        }
+        button { width:100%; background:#ff9800; color:white; padding:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer; margin-top:10px; }
+        button:hover { background:#e68900; }
+        .complaint-item { background:#fafafa; padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid #ddd; }
+        .status { font-weight:bold; color:green; }
+        .chat-box { background:#eef2ff; padding:10px; margin-top:8px; border-radius:6px; }
+        .complaint-image { max-width:100%; margin-top:8px; border-radius:6px; display:block; }
+        .msg { margin:6px 0; }
+        .small-btn { display:inline-block; padding:6px 8px; margin-top:6px; border-radius:4px; border:none; cursor:pointer; background:#ff9800; color:#fff; font-size:13px; }
+        /* Added spacing for the new section */
+        #complaint-list-portal { margin-top: 30px; }
+        #complaint-list-portal h3 { text-align: left; margin-bottom: 15px; }
+        /* Style for the innovative toggle */
+        #portal-toggle { 
+            background: #4CAF50; /* Green for Admin distinction */
+            margin-bottom: 15px; 
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        /* Sky blue background for the entire page */
+        body {
+            background-color: skyblue; /* Changed background to sky blue */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" id="login-section">
+    <h2>Student Login</h2>
+    <label>Username</label>
+    <input type="text" id="username" />
+
+    <label>Password</label>
+    <input type="password" id="password" />
+
+    <button onclick="login()">Login</button>
+</div>
+
+<div class="container" id="complaint-section" style="display:none;">
+    <h2>Raise a Complaint</h2>
+
+    <label>Category</label>
+    <select id="category">
+        <option value="">Select Category</option>
+        <option>Electrical</option>
+        <option>Plumbing</option>
+        <option>Internet</option>
+        <option>Mess</option>
+        <option>Cleaning</option>
+        <option>Water</option>
+    </select>
+
+    <label>Complaint Title</label>
+    <input type="text" id="title" placeholder="Issue title" />
+
+    <label>Description</label>
+    <textarea id="description" rows="4"></textarea>
+
+    <label>Upload Image</label>
+    <input type="file" id="image" accept="image/*" onchange="previewImage()" />
+    <img id="imagePreview" style="width:100%; margin-top:10px; display:none; border-radius:6px;" />
+
+    <button onclick="submitComplaint()">Submit Complaint</button>
+
+    <button onclick="logout()">Logout</button>
+
+    <div id="complaint-list-portal">
+        <h3>Your Submitted Complaints 📝</h3>
+        <div id="complaint-list">
+            </div>
+    </div>
+</div>
+
+<script>
+/* ---------- State ---------- */
+let loggedInUser = null;
+let complaints = [];
+
+/* ---------- Helpers ---------- */
+const $ = (id) => document.getElementById(id);
+
+function show(id){ $(id).style.display = "block"; }
+function hide(id){ $(id).style.display = "none"; }
+
+/* ---------- Image preview & convert ---------- */
+function previewImage(){
+    const file = $("image").files[0];
+    const img = $("imagePreview");
+    if(file){
+        img.src = URL.createObjectURL(file);
+        img.style.display = "block";
+    } else {
+        img.src = "";
+        img.style.display = "none";
+    }
+}
+
+function fileToBase64(file){
+    return new Promise((resolve, reject) => {
+        if(!file){ resolve(""); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+    });
+}
+
+/* ---------- Auth ---------- */
+function login(){
+    const u = $("username").value.trim();
+    const p = $("password").value.trim();
+    if(!u || !p){ alert("Enter username & password"); return; }
+
+    loggedInUser = u;
+    hide("login-section");
+    show("complaint-section");
+    // Fetch and render complaints immediately after login
+    fetchComplaints();
+}
+
+/* ---------- Logout ---------- */
+function logout(){
+    loggedInUser = null;
+    hide("complaint-section");
+    show("login-section");
+    complaints = [];
+    // clear image preview
+    $("imagePreview").style.display = "none";
+    $("image").value = "";
+    // Clear the complaints list as well
+    const list = $("complaint-list");
+    if (list) list.innerHTML = "";
+}
+
+/* ---------- Submit complaint (with image) ---------- */
+async function submitComplaint(){
+    const category = $("category").value;
+    const titleVal = $("title").value.trim();
+    const desc = $("description").value.trim();
+    const file = $("image").files[0];
+
+    if(!category || !titleVal || !desc){
+        alert("Fill all fields");
+        return;
+    }
+    if(!loggedInUser){ alert("You must be logged in"); return; }
+
+    let base64 = "";
+    try{
+        base64 = await fileToBase64(file);
+    } catch(e){
+        console.error("Image conversion failed", e);
+    }
+
+    // send to backend
+    fetch("http://localhost:3000/complaints", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            username: loggedInUser,
+            category,
+            title: titleVal,
+            description: desc,
+            image: base64 // may be "" if no file
+        })
+    })
+    .then(res => {
+        if(!res.ok) throw new Error("Network response not ok");
+        return res.json();
+    })
+    .then(created => {
+        // reset form
+        $("category").value = "";
+        $("title").value = "";
+        $("description").value = "";
+        $("image").value = "";
+        $("imagePreview").style.display = "none";
+
+        // add and render
+        complaints.unshift(created);
+        renderComplaints();
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Failed to submit complaint. Is backend running?");
+    });
+}
+
+/* ---------- Fetch complaints for logged user ---------- */
+function fetchComplaints(){
+    if(!loggedInUser) return;
+    // use template literal correctly
+    fetch(`http://localhost:3000/complaints?username=${encodeURIComponent(loggedInUser)}`)
+        .then(res => {
+            if(!res.ok) throw new Error("Fetch failed");
+            return res.json();
+        })
+        .then(data => {
+            complaints = Array.isArray(data) ? data : [];
+            renderComplaints();
+        })
+        .catch(err => {
+            console.error(err);
+            // show empty list if error
+            complaints = [];
+            renderComplaints();
+        });
+}
+
+/* ---------- Render complaints ---------- */
+function escapeHtml(str){
+    if(!str) return "";
+    return String(str)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;");
+}
+
+function renderComplaints(){
+    const list = $("complaint-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    if(!complaints.length){
+        list.innerHTML = "<p style='text-align: center; color: #777;'>You have no submitted complaints.</p>";
+        return;
+    }
+
+    complaints.forEach(c => {
+        // image HTML - backend should return base64 string in c.image if uploaded
+        const imageHtml = c.image ? `<img src="${escapeHtml(c.image)}" class="complaint-image" alt="uploaded image" />` : "";
+
+        // complaint block
+        const block = document.createElement("div");
+        block.className = "complaint-item";
+        block.innerHTML = `
+            <strong>${escapeHtml(c.title)}</strong> (${escapeHtml(c.category)}) <br>
+            <small style="color:#666;">Submitted: ${new Date(c.timestamp || Date.now()).toLocaleDateString()}</small><br>
+            ${escapeHtml(c.description)}<br>
+            ${imageHtml}
+        `;
+        list.appendChild(block);
+    });
+}
+
+/* ---------- Boot (if you want auto-focus) ---------- */
+document.addEventListener("DOMContentLoaded", () => {
+    $("username").focus();
+    
+});
+</script>
+</body>
+</html>
